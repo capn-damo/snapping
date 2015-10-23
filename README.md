@@ -1,2 +1,2 @@
 # snapping
-Scripts for window snappin
+Scripts for window snapping

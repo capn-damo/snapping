@@ -5,10 +5,10 @@
 #
 # Written by damo <damo@bunsenlabs.org> October 2015
 #
-# The script snaps a window to left or right sides of screen, using X window
-# properties for getting and storing values.
+# The script snaps a window to left or right sides of screen, or top and bottom
+# using X window properties for getting and storing values.
 #
-# Left and/or right screen margins can be specified;
+# Left, right, top, or bottom screen margins can be specified;
 # Works with dual monitors - windows will snap to edges of monitor they are on;
 # Honours user-defined Openbox left and right screen margins;
 # Works with decorated and undecorated windows, and windows with no borders;
@@ -19,7 +19,6 @@
 ########################################################################
 #
 # TODO:
-# Enable top/bottom splitting
 ########################################################################
 
 USAGE=$(echo -e "\vUSAGE:\twinsnap [--help|--left|--right] <margin>"
@@ -117,6 +116,8 @@ function get_OB_margins() {
         RCXML=$(sed -n "/<$TAG>/,/<\/$TAG>/p" "$RC")
         OB_LEFT=$(grep -oPm1 "(?<=<left>)[^<]+" <<< "$RCXML")
         OB_RIGHT=$(grep -oPm1 "(?<=<right>)[^<]+" <<< "$RCXML")
+        OB_TOP=$(grep -oPm1 "(?<=<top>)[^<]+" <<< "$RCXML")
+        OB_BOTTOM=$(grep -oPm1 "(?<=<bottom>)[^<]+" <<< "$RCXML")
     else
         echo "$RC not found"
         exit 1
@@ -152,6 +153,8 @@ function store_geometry() {  # store values in X window properties
     get_OB_margins
     set_prop_int "_OB_MARGIN_L" "$OB_LEFT"
     set_prop_int "_OB_MARGIN_R" "$OB_RIGHT"
+    set_prop_int "_OB_MARGIN_T" "$OB_TOP"
+    set_prop_int "_OB_MARGIN_B" "$OB_BOTTOM"
 }
 
 function load_stored_geometry() {
@@ -168,14 +171,19 @@ function load_stored_geometry() {
     get_prop "_OB_BORDER_B" "OB_border_bottom"
     get_prop "_OB_MARGIN_L" "OB_margin_left"
     get_prop "_OB_MARGIN_R" "OB_margin_right"
+    get_prop "_OB_MARGIN_T" "OB_margin_top"
+    get_prop "_OB_MARGIN_B" "OB_margin_bottom"
 }
 
 restore_dimension_geometry() {
     Xpos=$(( initial_x - adjust_X ))    # Correct for frame and border values
     Ypos=$(( initial_y - adjust_Y ))
-
-    wmctrl -r :ACTIVE: -b remove,maximized_vert && \
-    wmctrl -r :ACTIVE: -e 0,"$Xpos","$Ypos","$initial_width","$initial_height"
+    if [[ $SNAP = --left ]] || [[ $SNAP = --right ]];then
+        RESTORE="wmctrl -r :ACTIVE: -b remove,maximized_vert"
+    else
+        RESTORE="wmctrl -r :ACTIVE: -b remove,maximized_horz"
+    fi
+    $RESTORE && wmctrl -r :ACTIVE: -e 0,"$Xpos","$Ypos","$initial_width","$initial_height"
 
     xprop -id $WINDOW -remove _MONITORS
     xprop -id $WINDOW -remove _SNAPPED
@@ -191,6 +199,8 @@ restore_dimension_geometry() {
     xprop -id $WINDOW -remove _OB_BORDER_B
     xprop -id $WINDOW -remove _OB_MARGIN_L
     xprop -id $WINDOW -remove _OB_MARGIN_R
+    xprop -id $WINDOW -remove _OB_MARGIN_T
+    xprop -id $WINDOW -remove _OB_MARGIN_B
 }
 
 function snap() {
@@ -199,10 +209,13 @@ function snap() {
                         ;;
         "--right"   )   snap_right $MARGIN
                         ;;
-        #"--top"     )   snap_top "$MARGIN"
-                        #;;
-        #"--bottom"  )   snap_bottom "$MARGIN"
-                        #;;
+        "--top"     )   snap_top $MARGIN
+                        ;;
+        "--bottom"  )   snap_bottom $MARGIN
+                        ;;
+                *   )   echo "Unknown parameter" 2>&1
+                        exit 1 
+                        ;;
     esac
 }
 
@@ -243,6 +256,25 @@ function snap_right() {
     wmctrl -r :ACTIVE: -e 0,"$XPOS",0,"$WIN_WIDTH_R",-1
 }
 
+function snap_top() {
+    MARGIN_T=$(( $1 + OB_margin_top ))
+    YPOS=$(( valY + MARGIN_T ))
+    WIN_HEIGHT_T=$(( ($valH/2) - $OB_border_top - $OB_border_bottom - $MARGIN_T ))
+    # Move window
+    wmctrl -r :ACTIVE: -b remove,maximized_vert && 
+    wmctrl -r :ACTIVE: -b add,maximized_horz && \
+    wmctrl -r :ACTIVE: -e 0,-1,$YPOS,-1,$WIN_HEIGHT_T
+}
+
+function snap_bottom() {
+    MARGIN_B=$(( $1 + OB_margin_bottom ))
+    WIN_HEIGHT_B=$((  ($valH/2) - $OB_border_top - $OB_border_bottom - $MARGIN_B ))
+    YPOS=$(( $valH/2 + $valY ))
+    # Move windo
+    wmctrl -r :ACTIVE: -b remove,maximized_vert && 
+    wmctrl -r :ACTIVE: -b add,maximized_horz && \
+    wmctrl -r :ACTIVE: -e 0,-1,$YPOS,-1,$WIN_HEIGHT_B
+}
 ####    END FUNCTIONS   ################################################
 
 if [[ $1 = "--help" ]] || [[ ! $@ ]];then
@@ -261,9 +293,10 @@ WINDOW=$(xdotool getactivewindow)
 get_prop "_SNAPPED" "SNAP"      #"Flag" for left/right snapped
                                 #      1: Window is snapped to LEFT
                                 #      2: Window is snapped to RIGHT
-# xprop returns 'such' or 'found.' upon error
+                                #      3: Window is snapped to TOP
+                                #      4: Window is snapped to BOTTOM
 case $SNAP in
-    "such" | "found." )
+    "such" | "found." ) # xprop returns 'such' or 'found.' upon error
                 count_monitors
                 store_geometry
                 get_screen_dimensions
@@ -281,16 +314,18 @@ case $SNAP in
                                     ;;
                     "--right"   )   snap_right $MARGIN
                                     ;;
-                    #"--top"     )   snap_top "$MARGIN"
-                                    #;;
-                    #"--bottom"  )   snap_bottom "$MARGIN"
-                                    #;;
+                    "--top"     )   snap_top $MARGIN
+                                    ;;
+                    "--bottom"  )   snap_bottom $MARGIN
+                                    ;;
+                            *   )   echo "Unknown parameter" 2>&1
+                                    exit 1 
+                                    ;;
                 esac
                 set_prop_str "_SNAPPED" "$1"
                 ;;
 
-    #"--left" | "--right" | "--top" | "--bottom" )
-    "--left" | "--right" )
+    "--left" | "--right" | "--top" | "--bottom" )
                 load_stored_geometry
                 get_screen_dimensions
 

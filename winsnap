@@ -8,7 +8,7 @@
 # The script snaps a window to left or right sides of screen, or top and bottom
 # using X window properties for getting and storing values.
 #
-# Left, right, top, or bottom screen margins can be specified;
+# Left, right, top, or bottom screen margins can be specified (negative values allowed);
 # Works with dual monitors - windows will snap to edges of monitor they are on;
 # Honours user-defined Openbox left and right screen margins;
 # Works with decorated and undecorated windows, and windows with no borders;
@@ -21,16 +21,19 @@
 # TODO:
 ########################################################################
 
-USAGE=$(echo -e "\vUSAGE:\twinsnap [--help|--left|--right] <margin>"
+USAGE=$(echo -e "\vUSAGE:\twinsnap [--help|--left|--right|--top|--bottom] <margin>"
         echo -e "\v\t--help \t\tUsage"
         echo -e "\t--left \t\tsnap to left screen edge"
-        echo -e "\t--right \tasnap to right screen edge"
+        echo -e "\t--right \tsnap to right screen edge"
+        echo -e "\t--top \t\tsnap to upper screen edge"
+        echo -e "\t--bottom \tsnap to bottom screen edge"
         echo
         echo -e "\tIf no margin is specified, the left and right values set\n\tfor Openbox in rc.xml are used."
+        echo -e "\tNegative margin values can be used (there may be a panel\n\ton one screen only)."
         echo
-        echo -e "\tThe active window will snap to the edge of the screen on\n\twhich it placed"
+        echo -e "\tThe active window will snap to the edge of the screen on\n\twhich it placed."
         echo
-        echo -e "\tOriginal window position and dimensions are restored if\n\tthe --left or --right command is repeated,"
+        echo -e "\tOriginal window position and dimensions are restored if\n\tthe command is repeated."
 )
 
 ####  FUNCTIONS  ####################################################
@@ -97,7 +100,7 @@ function get_screen_dimensions() {   # get net workarea, if panels are present
         screenW=$(( $desktopW - $screenW1 - $panelR ))
     else
         X_zero=$valX                            # window is on L monitor
-        screenW=$(( $valW - $X_zero ))
+        screenW=$(( $screenW1 - $X_zero ))
     fi
 }
 
@@ -186,7 +189,10 @@ restore_dimension_geometry() {
         RESTORE="wmctrl -r :ACTIVE: -b remove,maximized_horz"
     fi
     $RESTORE && wmctrl -r :ACTIVE: -e 0,"$Xpos","$Ypos","$initial_width","$initial_height"
+    remove_geometry
+}
 
+function remove_geometry(){
     xprop -id $WINDOW -remove _MONITORS
     xprop -id $WINDOW -remove _SNAPPED
     xprop -id $WINDOW -remove _INITIAL_DIMENSION_X  # Clear X window properties
@@ -206,6 +212,7 @@ restore_dimension_geometry() {
 }
 
 function snap() {
+    X_zero=$(( $desktopW - $screenW2 ))
     case "$1" in
         "--left"    )   snap_left $MARGIN
                         ;;
@@ -231,11 +238,11 @@ function snap_left() {
     else
         XPOS=$(( $OB_margin_left + $X_zero ))  # add OB margin
     fi
-    WIN_WIDTH_L=$((( $screenW / 2 ) - $XPOS - $adjust_X + $X_zero ))
+    WIN_WIDTH_L=$(( ( $screenW / 2 ) - $XPOS - $adjust_X + $X_zero ))
     # Move window
     wmctrl -r :ACTIVE: -b add,maximized_vert && \
     wmctrl -r :ACTIVE: -b remove,maximized_horz && \
-    wmctrl -r :ACTIVE: -e 0,"$XPOS",0,"$WIN_WIDTH_L",-1
+    wmctrl -r :ACTIVE: -e 0,$XPOS,0,"$WIN_WIDTH_L",-1
 }
 
 function snap_right() {
@@ -249,8 +256,8 @@ function snap_right() {
         MARGIN_R="$OB_margin_right"  # add OB margin to right edge
     fi
     XPOS=$((( $screenW / 2 ) + $X_zero ))
-    # Move window
     WIN_WIDTH_R=$((( $screenW / 2 ) - $MARGIN_R - $adjust_X ))
+    # Move window
     wmctrl -r :ACTIVE: -b add,maximized_vert && \
     wmctrl -r :ACTIVE: -b remove,maximized_horz && \
     wmctrl -r :ACTIVE: -e 0,"$XPOS",0,"$WIN_WIDTH_R",-1
@@ -258,22 +265,22 @@ function snap_right() {
 
 function snap_top() {
     MARGIN_T=$(( $1 + OB_margin_top ))
-    YPOS=$(( valY + MARGIN_T ))
+    YPOS=$(( $valY + $MARGIN_T ))
     WIN_HEIGHT_T=$(( ($valH/2) - $OB_border_top - $OB_border_bottom - $MARGIN_T ))
     # Move window
     wmctrl -r :ACTIVE: -b remove,maximized_vert && 
     wmctrl -r :ACTIVE: -b add,maximized_horz && \
-    wmctrl -r :ACTIVE: -e 0,-1,$YPOS,-1,$WIN_HEIGHT_T
+    wmctrl -r :ACTIVE: -e 0,-1,"$YPOS",-1,"$WIN_HEIGHT_T"
 }
 
 function snap_bottom() {
     MARGIN_B=$(( $1 + OB_margin_bottom ))
-    WIN_HEIGHT_B=$((  ($valH/2) - $OB_border_top - $OB_border_bottom - $MARGIN_B ))
+    WIN_HEIGHT_B=$(( ($valH/2) - $OB_border_top - $OB_border_bottom - $MARGIN_B ))
     YPOS=$(( $valH/2 + $valY ))
-    # Move windo
+    # Move window
     wmctrl -r :ACTIVE: -b remove,maximized_vert && 
     wmctrl -r :ACTIVE: -b add,maximized_horz && \
-    wmctrl -r :ACTIVE: -e 0,-1,$YPOS,-1,$WIN_HEIGHT_B
+    wmctrl -r :ACTIVE: -e 0,-1,"$YPOS",-1,"$WIN_HEIGHT_B"
 }
 ####    END FUNCTIONS   ################################################
 
@@ -288,7 +295,6 @@ else
     MARGIN=0
 fi
 WINDOW=$(xdotool getactivewindow)
-
 #load_stored_geometry
 get_prop "_SNAPPED" "SNAP"      #"Flag" for left/right snapped
                                 #      1: Window is snapped to LEFT
@@ -328,7 +334,6 @@ case $SNAP in
     "--left" | "--right" | "--top" | "--bottom" )
                 load_stored_geometry
                 get_screen_dimensions
-
                 if [[ $1 = "$SNAP" ]];then
                     restore_dimension_geometry
                 else

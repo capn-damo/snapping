@@ -77,15 +77,17 @@ function get_screen_dimensions() {   # get net workarea, if panels are present
 
     monApos=$(echo $monAgeom | awk -F "+" '{print $2}') # get offset_x
     monBpos=$(echo $monBgeom | awk -F "+" '{print $2}')
-
-    if [[ $monApos -lt $monBpos ]]; then
-        screenW1=${monAgeom%'x'*}   # width of left screen
-        screenW2=${monBgeom%'x'*}   # width of right screen
+    if [[ $MONITORS != 1 ]];then     # test if there are 2 monitors
+        if [[ $monApos -lt $monBpos ]]; then
+            screenW1=${monAgeom%'x'*}   # width of left screen
+            screenW2=${monBgeom%'x'*}   # width of right screen
+        else
+            screenW2=${monAgeom%'x'*}
+            screenW1=${monBgeom%'x'*}
+        fi
     else
-        screenW2=${monAgeom%'x'*}
-        screenW1=${monBgeom%'x'*}
+        screenW1=${monAgeom%'x'*}   # only one screen
     fi
-
     # X position of active window:
     WINPOS=$(xwininfo -id $WINDOW | grep "Absolute upper-left X")
 
@@ -95,7 +97,7 @@ function get_screen_dimensions() {   # get net workarea, if panels are present
         screenW=$(( $desktopW - $screenW1 - $panelR ))
     else
         X_zero=$valX                            # window is on L monitor
-        screenW=$(( $screenW1 - $valX ))
+        screenW=$(( $valW - $X_zero ))
     fi
 }
 
@@ -229,7 +231,6 @@ function snap_left() {
     else
         XPOS=$(( $OB_margin_left + $X_zero ))  # add OB margin
     fi
-
     WIN_WIDTH_L=$((( $screenW / 2 ) - $XPOS - $adjust_X + $X_zero ))
     # Move window
     wmctrl -r :ACTIVE: -b add,maximized_vert && \
@@ -247,7 +248,6 @@ function snap_right() {
     else
         MARGIN_R="$OB_margin_right"  # add OB margin to right edge
     fi
-
     XPOS=$((( $screenW / 2 ) + $X_zero ))
     # Move window
     WIN_WIDTH_R=$((( $screenW / 2 ) - $MARGIN_R - $adjust_X ))

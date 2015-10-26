@@ -91,20 +91,25 @@ function get_screen_dimensions() {   # get net workarea, if panels are present
     else
         screenW1=${monAgeom%'x'*}   # only one screen
     fi
-    # X position of active window:
+    get_ActiveX
+}
+
+function get_ActiveX(){      # X position of active window:
     WINPOS=$(xwininfo -id $WINDOW | grep "Absolute upper-left X")
 
-    if [[ ${WINPOS##*' '} -gt $screenW1 ]];then # window is on R monitor
+    if [[ ${WINPOS##*' '} -ge $screenW1 ]];then # window is on R monitor
         X_zero=$(( $desktopW - $screenW2 ))
         panelR=$(( $desktopW - $valW - $valX ))
         screenW=$(( $desktopW - $screenW1 - $panelR ))
     else
         X_zero=$valX                            # window is on L monitor
+        #screenW=$(( $screenW1 - $X_zero ))
         screenW=$(( $screenW1 - $X_zero ))
+        
     fi
 }
 
-get_WM_FRAME() {         # get borders set by WM
+function get_WM_FRAME() {         # get borders set by WM
     # WM sets window frame and border sizes
     # Titlebar height depends on fontsize of Active titlebar
     winEXTENTS=$(xprop -id $WINDOW | awk '/_NET_FRAME_EXTENTS/ {gsub(",","");print $3,$4,$5,$6}')
@@ -180,7 +185,7 @@ function load_stored_geometry() {
     get_prop "_OB_MARGIN_B" "OB_margin_bottom"
 }
 
-restore_dimension_geometry() {
+function restore_dimension_geometry() {
     Xpos=$(( initial_x - adjust_X ))    # Correct for frame and border values
     Ypos=$(( initial_y - adjust_Y ))
     if [[ $SNAP = --left ]] || [[ $SNAP = --right ]];then
@@ -193,26 +198,19 @@ restore_dimension_geometry() {
 }
 
 function remove_geometry(){
-    xprop -id $WINDOW -remove _MONITORS
-    xprop -id $WINDOW -remove _SNAPPED
-    xprop -id $WINDOW -remove _INITIAL_DIMENSION_X  # Clear X window properties
-    xprop -id $WINDOW -remove _INITIAL_DIMENSION_Y
-    xprop -id $WINDOW -remove _INITIAL_DIMENSION_WIDTH
-    xprop -id $WINDOW -remove _INITIAL_DIMENSION_HEIGHT
-    xprop -id $WINDOW -remove _OFFSET_X
-    xprop -id $WINDOW -remove _OFFSET_Y
-    xprop -id $WINDOW -remove _OB_BORDER_L
-    xprop -id $WINDOW -remove _OB_BORDER_R
-    xprop -id $WINDOW -remove _OB_BORDER_T
-    xprop -id $WINDOW -remove _OB_BORDER_B
-    xprop -id $WINDOW -remove _OB_MARGIN_L
-    xprop -id $WINDOW -remove _OB_MARGIN_R
-    xprop -id $WINDOW -remove _OB_MARGIN_T
-    xprop -id $WINDOW -remove _OB_MARGIN_B
+    geom=(_MONITORS _SNAPPED _INITIAL_DIMENSION_X _INITIAL_DIMENSION_Y \
+    _INITIAL_DIMENSION_WIDTH _INITIAL_DIMENSION_HEIGHT \
+    _OFFSET_X _OFFSET_Y \
+    _OB_BORDER_L _OB_BORDER_R _OB_BORDER_T _OB_BORDER_B \
+    _OB_MARGIN_L _OB_MARGIN_R _OB_MARGIN_T _OB_MARGIN_B)
+    
+    for g in ${geom[@]};do
+        xprop -id $WINDOW -remove $g
+    done
 }
 
 function snap() {
-    X_zero=$(( $desktopW - $screenW2 ))
+#    get_screen_dimensions
     case "$1" in
         "--left"    )   snap_left $MARGIN
                         ;;

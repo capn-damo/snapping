@@ -1,4 +1,3 @@
- snapping
 Scripts for window snapping
 
 Based on ideas in a script found at

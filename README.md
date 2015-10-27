@@ -1,4 +1,4 @@
-Scripts for window snapping
+Script for window snapping
 
 Based on ideas in a script found at
 http://icculus.org/pipermail/openbox/2013-January/007772.html
